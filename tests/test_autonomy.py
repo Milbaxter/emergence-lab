@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from emergence.autonomy import AutonomousDemo, Missions, MissionManager, run_mission
-from emergence.db import Lab, LabError
+from emergence.db import Lab, LabError, now, uid
 from emergence.providers import InferenceError
 
 
@@ -166,6 +166,129 @@ class MissionTests(unittest.TestCase):
         state=run_mission(self.lab,self.create(call_limit=9))
         self.assertEqual(state['missions'][0]['status'],'exhausted')
         self.assertEqual(len(state['turns']),8)
+
+
+class OverviewTests(unittest.TestCase):
+    setUp=MissionTests.setUp
+
+    def mission(self,provider='codex',status='completed'):
+        mid=self.missions.create({'provider':provider})['id']
+        with self.lab.tx() as db:
+            db.execute('UPDATE missions SET status=? WHERE id=?',(status,mid))
+        return mid
+
+    def claim(self,mid,status='peer_checked'):
+        cid=uid('claim')
+        with self.lab.tx() as db:
+            db.execute('INSERT INTO mission_claims VALUES(?,?,?,?,?,?,?,?,?)',
+                       (cid,mid,1,'Fixture finding',status,'[]','Fixture limits',now(),now()))
+        return cid
+
+    def report(self,mid,cid,status='ready',timestamp=None,title='Fixture report'):
+        rid,vid=uid('report'),uid('edition')
+        timestamp=timestamp or now()
+        content={'title':title,'takeaway':'Current-edition takeaway','next_step':'Try a further test.'}
+        with self.lab.tx() as db:
+            db.execute('INSERT INTO mission_reports VALUES(?,?,?,?,?,?,?,?)',
+                       (rid,mid,cid,status,vid,'Fixture reason',timestamp,timestamp))
+            db.execute('INSERT INTO mission_report_versions VALUES(?,?,?,?,?,?)',
+                       (vid,rid,'fixture-turn',json.dumps(content),'fixture-hash',timestamp))
+        return rid
+
+    def test_empty_overview_has_zero_counts_and_no_reports(self):
+        state=self.missions.state()
+        self.assertIsNone(state['selected'])
+        self.assertEqual(state['overview']['recent_reports'],[])
+        self.assertEqual(state['overview']['demo_reports'],[])
+        self.assertTrue(all(value==0 for group in state['overview']['counts'].values() for value in group.values()))
+
+    def test_global_counts_separate_demo_results_and_do_not_count_completion_as_success(self):
+        source=self.mission()
+        refinement=self.mission(status='paused')
+        empty=self.mission()
+        demo=self.mission(provider='demo',status='running')
+        self.mission(provider='demo',status='ready')
+        checked=self.claim(source)
+        self.claim(source,status='provisional')
+        self.report(source,checked)
+        refined=self.report(refinement,checked)
+        self.report(demo,self.claim(demo))
+        with self.lab.tx() as db:
+            for ordinal,usage in enumerate(({'tokens':{'input_tokens':10,'output_tokens':4}},None),1):
+                db.execute('''INSERT INTO mission_turns
+                    (id,mission_id,ordinal,agent,stage,cycle,status,prompt_json,usage_json,started_at)
+                    VALUES(?,?,?,?,?,?,?,?,?,?)''',
+                    (uid('turn'),source,ordinal,'scout','explore',1,'failed','{}',json.dumps(usage) if usage else None,now()))
+        state=self.missions.state(refinement)
+        counts=state['overview']['counts']
+        self.assertEqual(counts['live'],{'total':3,'running':0,'paused':1,'ready':0,'completed':2,
+                                       'exhausted':0,'failed':0,'checked_findings':1,'ready_reports':2})
+        self.assertEqual(counts['demo'],{'total':2,'running':1,'paused':0,'ready':1,'completed':0,
+                                       'exhausted':0,'failed':0,'checked_findings':1,'ready_reports':1})
+        self.assertEqual(counts['all']['total'],5)
+        self.assertEqual(counts['all']['checked_findings'],2)
+        self.assertEqual(counts['all']['ready_reports'],3)
+        missions={m['id']:m for m in state['missions']}
+        self.assertEqual((missions[source]['calls_used'],missions[source]['input_tokens'],missions[source]['output_tokens']),(2,10,4))
+        self.assertEqual(missions[refinement]['checked_findings_count'],0)
+        self.assertEqual(missions[refinement]['ready_reports_count'],1)
+        self.assertEqual(missions[empty]['ready_reports_count'],0)
+        # Detail selection and the refinement's original supporting claim remain available.
+        self.assertEqual(state['selected'],refinement)
+        self.assertEqual([r['id'] for r in state['reports']],[refined])
+        self.assertEqual([c['id'] for c in state['claims']],[checked])
+        self.execute.assert_not_called()
+
+    def test_ready_reports_disappear_when_supporting_claim_is_no_longer_checked(self):
+        mid=self.mission()
+        cid=self.claim(mid)
+        self.report(mid,cid)
+        self.assertEqual(self.missions.state(mid)['overview']['counts']['live']['ready_reports'],1)
+        for status in ('retracted','superseded','provisional'):
+            with self.subTest(claim_status=status):
+                # Even a stale ready report row cannot promote a withdrawn claim.
+                with self.lab.tx() as db:
+                    db.execute('UPDATE mission_claims SET status=? WHERE id=?',(status,cid))
+                state=self.missions.state(mid)
+                self.assertEqual(state['overview']['recent_reports'],[])
+                self.assertEqual(state['overview']['counts']['live']['ready_reports'],0)
+                self.assertEqual(state['overview']['counts']['live']['checked_findings'],0)
+                self.assertEqual(state['missions'][0]['ready_reports_count'],0)
+
+    def test_unready_or_missing_current_editions_are_not_presented_as_ready(self):
+        mid=self.mission()
+        cid=self.claim(mid)
+        for status in ('draft','withheld','changes_requested','withdrawn'):
+            self.report(mid,cid,status=status)
+        invalid=self.report(mid,cid)
+        with self.lab.tx() as db:
+            db.execute('UPDATE mission_reports SET current_version=NULL WHERE id=?',(invalid,))
+        overview=self.missions.state(mid)['overview']
+        self.assertEqual(overview['counts']['live']['checked_findings'],1)
+        self.assertEqual(overview['counts']['live']['ready_reports'],0)
+        self.assertEqual(overview['recent_reports'],[])
+
+    def test_recent_reports_use_current_edition_with_separate_live_and_demo_limits(self):
+        live=self.mission()
+        live_claim=self.claim(live)
+        live_ids=[self.report(live,live_claim,timestamp=f'2026-01-0{i}T00:00:00+00:00',title=f'Live {i}') for i in range(1,7)]
+        demo=self.mission(provider='demo')
+        demo_claim=self.claim(demo)
+        demo_ids=[self.report(demo,demo_claim,timestamp=f'2026-02-0{i}T00:00:00+00:00') for i in range(1,8)]
+        # Old edition content must not become the preview merely because it exists.
+        with self.lab.tx() as db:
+            db.execute('INSERT INTO mission_report_versions VALUES(?,?,?,?,?,?)',
+                       (uid('edition'),live_ids[-1],'older-turn',json.dumps({'title':'Obsolete title'}),'old-hash',now()))
+        overview=self.missions.state(demo)['overview']
+        self.assertEqual([r['id'] for r in overview['recent_reports']],list(reversed(live_ids[-5:])))
+        self.assertEqual([r['id'] for r in overview['demo_reports']],list(reversed(demo_ids[-3:])))
+        self.assertEqual(overview['recent_reports'][0]['title'],'Live 6')
+        self.assertEqual(overview['recent_reports'][0]['takeaway'],'Current-edition takeaway')
+        self.assertEqual(overview['recent_reports'][0]['claim_status'],'peer_checked')
+        self.assertTrue(all(r['provider']=='codex' for r in overview['recent_reports']))
+        self.assertTrue(all(r['provider']=='demo' for r in overview['demo_reports']))
+        self.assertEqual(overview['counts']['live']['ready_reports'],6)
+        self.assertEqual(overview['counts']['demo']['ready_reports'],7)
 
 
 if __name__=='__main__':unittest.main()

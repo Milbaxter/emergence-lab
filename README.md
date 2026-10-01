@@ -16,7 +16,7 @@ cd emergence-lab
 python3 -m emergence serve
 ```
 
-Open **http://127.0.0.1:7331**. Choose **New mission**, enter a research direction, and set the maximum calls, research cycles, and deadline. Choose **Synthetic rehearsal** first if you want to inspect the workflow without inference.
+Open **http://127.0.0.1:7331**. The overview shows the lab direction, current team status, and latest result. Choose **New mission**, enter a research direction, and set a call allowance. **More settings** contains the cycle limit, deadline, and model. Choose **Synthetic rehearsal** first if you want to inspect the workflow without inference.
 
 For live research, install the [official Codex CLI](https://developers.openai.com/codex/cli), then sign in:
 
@@ -57,7 +57,7 @@ Agents see each other's messages and actual execution receipts. They can address
 
 This is a **designed research protocol with adaptive decisions**, not a free-form swarm. Roles run serially on the same subscription. Different roles are not independent people. Public enrollment, multiple workgroups, and on-chain governance are later stages.
 
-The dashboard leads with the finished research note: takeaway, purpose, comparison, next action, and limitations. Working notes, conversation, usage, code, evidence, and history are available underneath. You can pause or stop at the mission level.
+The dashboard opens to a compact overview: the lab direction, whether the team is working or paused, a four-step view of the process, and a preview of its latest result. **Read report** opens the full research note; **Mission details** opens conversation, usage, code, and evidence. Earlier missions are collapsed on the overview, and manual tools live under **Records**. Live research and synthetic rehearsals stay clearly separated. You can pause from the overview or stop from mission details.
 
 ## The quality bar
 
@@ -119,6 +119,7 @@ Private state lives in ignored `.emergence/`. Export includes the manual lab plu
 python3 -m unittest discover -s tests -v
 node --check emergence/static/app.js
 node --check emergence/static/missions.js
+node --test tests/test_dashboard.cjs
 ```
 
 Tests use temporary state, fake inference, and local sandbox probes. They consume no model allowance. GitHub Actions remains an **inactive template** in `docs/ci-workflow.yml`; enabling it requires workflow-write permission.

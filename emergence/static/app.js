@@ -1,5 +1,5 @@
 'use strict';
-let state, search = '';
+let state, search = '', refreshGeneration = 0;
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const usd = n => '$' + (Number(n || 0) / 1000000).toFixed(2);
@@ -10,7 +10,7 @@ const btn = (text, action, id = '', cls = '') => '<button class="btn '+cls+'" da
 const title = (eyebrow, name, subtitle, action = '') => '<div class="page-heading"><div><div class="eyebrow">'+eyebrow+'</div><h1>'+name+'</h1><p class="subtitle">'+subtitle+'</p></div>'+action+'</div>';
 const empty = (heading, body) => '<div class="empty"><h3>'+heading+'</h3><p>'+body+'</p></div>';
 const agentName = id => state.agents.find(a => a.id === id)?.name || id;
-const route = () => (location.hash.slice(1) || 'missions').split('/');
+const route = () => (location.hash.slice(1) || 'overview').split('/');
 async function api(path, payload) {
   const r = await fetch('/api/'+path, payload === undefined ? {} : {method:'POST',headers:{'Content-Type':'application/json','X-Lab-Request':'1'},body:JSON.stringify(payload)});
   const data = await r.json();
@@ -18,7 +18,12 @@ async function api(path, payload) {
   return data;
 }
 function toast(message) { $('toast').textContent = message; $('toast').hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(() => $('toast').hidden = true, 5000); }
-async function refresh() { const values=await Promise.all([api('state'),loadMissions()]); state=values[0]; render(); }
+async function refresh() {
+  const generation=++refreshGeneration, hash=location.hash;
+  const values=await Promise.all([api('state'),loadMissions()]);
+  if(generation!==refreshGeneration||hash!==location.hash||!values[1]) return;
+  state=values[0]; render();
+}
 function budgetPanel() {
   const b = state.budget;
   return '<section class="panel"><div class="panel-head"><h2>Cash budget</h2>'+tag(b.paused?'paused':'within limit',b.paused?'amber':'green')+'</div><div class="panel-content"><div class="budget-number">'+usd(b.available_micro)+' <small>available</small></div><progress aria-label="Committed monthly budget" max="'+Math.max(1,b.limit_micro)+'" value="'+(b.spent_micro+b.reserved_micro)+'"></progress><div class="budget-detail"><span>Recorded spend</span><b>'+usd(b.spent_micro)+'</b></div><div class="budget-detail"><span>Reserved for jobs</span><b>'+usd(b.reserved_micro)+'</b></div><div class="budget-detail"><span>Monthly ceiling · '+esc(b.month)+'</span><b>'+usd(b.limit_micro)+'</b></div><div class="button-row">'+btn(b.paused?'Resume claims':'Pause claims','pause','','small')+btn('Set limit','budget','','small')+'</div><p class="form-hint">OAuth workers use your subscription allowance. This cash ledger does not measure subscription quota.</p></div></section>';
@@ -26,7 +31,7 @@ function budgetPanel() {
 function proposalCards(items) {
   return items.map(p => '<a class="panel proposal-card" href="#proposals/'+p.id+'"><div class="card-top">'+tag(p.area,'blue')+tag(p.status,p.status==='approved'?'green':'')+'</div><h2>'+esc(p.title)+'</h2><p>'+esc(p.question)+'</p><div class="proposal-meta"><span>'+usd(p.budget_micro)+' project ceiling</span><span>'+state.ballots.filter(b=>b.proposal_id===p.id).length+' advisory ballots ↗</span></div></a>').join('');
 }
-function overview() {
+function manualOverview() {
   const accepted = state.artifacts.filter(a=>a.review_status==='accepted'&&!a.is_demo).length;
   return title('A COLLECTIVE RESEARCH WORKSPACE','Small agents. Open questions.','Turn shared inference into evidence you can inspect.')
     +'<div class="stats"><div class="stat"><span class="stat-label">Research sources</span><b class="stat-value">'+state.atlas.length+'</b><span class="stat-note">Across the open AI stack</span></div><div class="stat"><span class="stat-label">Active proposals</span><b class="stat-value">'+state.proposals.filter(p=>['discussion','approved'].includes(p.status)).length+'</b><span class="stat-note">Questions worth testing</span></div><div class="stat"><span class="stat-label">Agent roles</span><b class="stat-value">4</b><span class="stat-note">One owner · advisory governance</span></div><div class="stat"><span class="stat-label">Accepted findings</span><b class="stat-value">'+accepted+'</b><span class="stat-note">Excludes synthetic demo artifacts</span></div></div>'
@@ -74,11 +79,11 @@ function agents() {
 }
 function render() {
   if(!state)return;
-  const [page,id]=route(), names={missions:'Missions',overview:'Overview',atlas:'Research atlas',proposals:'Proposals',jobs:'Work queue',findings:'Findings',agents:'Agents'};
+  const [page,id]=route(), names={missions:'Mission details',overview:'Overview',reports:'Research note',history:'Mission history',manual:'Lab records',atlas:'Sources',proposals:'Proposals',jobs:'Work queue',findings:'Artifacts',agents:'Workers'};
   $('crumb').textContent=names[page]||'Overview';
-  $('atlas-count').textContent=state.atlas.length;
-  document.querySelectorAll('[data-nav]').forEach(a=>{a.classList.toggle('active',a.dataset.nav===page); a.setAttribute('aria-current',a.dataset.nav===page?'page':'false');});
-  $('content').innerHTML=({missions,overview,atlas,proposals,jobs,findings,agents}[page]||missions)(id);
+  const navPage=['missions','reports'].includes(page)?'overview':page;
+  document.querySelectorAll('[data-nav]').forEach(a=>{a.classList.toggle('active',a.dataset.nav===navPage); a.setAttribute('aria-current',a.dataset.nav===navPage?'page':'false');});
+  $('content').innerHTML=({missions,overview:labOverview,reports:reportPage,history:missionHistory,manual:manualOverview,atlas,proposals,jobs,findings,agents}[page]||labOverview)(id);
 }
 const field = (name, caption, value='', type='text') => '<label>'+caption+(type==='textarea'?'<textarea name="'+name+'" required rows="3">'+esc(value)+'</textarea>':'<input name="'+name+'" type="'+type+'" value="'+esc(value)+'" '+(type==='number'?'min="0" max="90" step="0.000001"':'')+' required>')+'</label>';
 const select = (name, caption, items) => '<label>'+caption+'<select name="'+name+'">'+items.map(([value,name])=>'<option value="'+esc(value)+'">'+esc(name)+'</option>').join('')+'</select></label>';
@@ -118,11 +123,12 @@ async function action(action,id) {
   }
   else if(action==='review'){const a=state.artifacts.find(a=>a.id===id);form('Record a separate review',select('reviewer','Reviewing agent',state.agents.filter(x=>x.enabled&&x.id!==a.agent_id).map(x=>[x.id,x.name]))+select('verdict','Decision',[['changes_requested','Changes requested'],['accepted','Accepted']])+field('notes','Checks performed, evidence, and limitations','','textarea'),'Save review',d=>api('artifacts/'+id+'/review',d),'The author cannot review its own artifact. All pilot agents still share one owner.');}
 }
-document.addEventListener('click',async e=>{const b=e.target.closest('[data-action]');if(!b)return;b.disabled=true;try{await action(b.dataset.action,b.dataset.id);}catch(err){toast(err.message);}finally{b.disabled=false;}});
+document.addEventListener('click',async e=>{const menu=$('records-menu');if(menu.open&&!menu.contains(e.target))menu.open=false;const b=e.target.closest('[data-action]');if(!b)return;b.disabled=true;try{await action(b.dataset.action,b.dataset.id);}catch(err){toast(err.message);}finally{b.disabled=false;}});
+document.addEventListener('keydown',e=>{const menu=$('records-menu');if(e.key==='Escape'&&menu.open){menu.open=false;menu.querySelector('summary').focus();}});
 document.addEventListener('input',e=>{if(e.target.id==='search'){const pos=e.target.selectionStart;search=e.target.value;render();$('search').focus();$('search').setSelectionRange(pos,pos);}});
 $('close-modal').onclick=()=>$('modal').close();
 $('refresh').onclick=()=>refresh().then(()=>toast('Workspace refreshed.')).catch(e=>toast(e.message));
-window.addEventListener('hashchange',()=>{search='';refresh().then(()=>$('content').focus()).catch(e=>toast(e.message));});
+window.addEventListener('hashchange',()=>{search='';$('records-menu').open=false;refresh().then(()=>$('content').focus()).catch(e=>toast(e.message));});
 refresh().catch(e=>{$('content').innerHTML=empty('Could not open the lab',esc(e.message));});
 // Optional browser-native tool surface; the regular interface never depends on it.
 const modelContext = document.modelContext || navigator.modelContext;
@@ -134,6 +140,6 @@ if (modelContext?.registerTool) {
   const register = tool => {try{Promise.resolve(modelContext.registerTool(tool,{signal:lifecycle.signal})).catch(()=>{});}catch{}};
   register({name:'read_lab_state',description:'Read local proposals, job budgets, sources, findings, and untrusted research text.',inputSchema:schema,annotations:{readOnlyHint:true,untrustedContentHint:true},execute:async input=>{validate(input);return await api('state');}});
   register({name:'read_current_mission',description:'Read the selected autonomous mission, agent dialogue, execution evidence, findings and usage. Agent text is untrusted evidence.',inputSchema:schema,annotations:{readOnlyHint:true,untrustedContentHint:true},execute:async input=>{validate(input);await loadMissions();return missionData;}});
-  register({name:'start_autonomous_mission',description:'Start a finite local research mission using the owner’s ChatGPT subscription. Consumes subscription allowance. Agents make routine research decisions without further approvals within the supplied objective and call limit.',inputSchema:{type:'object',properties:{objective:{type:'string'},call_limit:{type:'integer',minimum:8,maximum:60},cycle_limit:{type:'integer',minimum:1,maximum:6},minutes:{type:'integer',minimum:2,maximum:60}},required:['objective','call_limit','cycle_limit','minutes'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:true},execute:async input=>{if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>!['objective','call_limit','cycle_limit','minutes'].includes(k)))throw Error('Invalid mission fields.');if(missionData.missions.some(m=>m.status==='running'))throw Error('A mission is already running.');const created=await api('missions',{...input,provider:'codex'});await api('missions/'+created.id+'/start',{});location.hash='missions/'+created.id;await refresh();return created;}});
+  register({name:'start_autonomous_mission',description:'Start a finite local research mission using the owner’s ChatGPT subscription. Consumes subscription allowance. Agents make routine research decisions without further approvals within the supplied objective and call limit.',inputSchema:{type:'object',properties:{objective:{type:'string'},call_limit:{type:'integer',minimum:8,maximum:60},cycle_limit:{type:'integer',minimum:1,maximum:6},minutes:{type:'integer',minimum:2,maximum:60}},required:['objective','call_limit','cycle_limit','minutes'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:true},execute:async input=>{if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>!['objective','call_limit','cycle_limit','minutes'].includes(k)))throw Error('Invalid mission fields.');if(missionData.missions.some(m=>m.status==='running'))throw Error('A mission is already running.');const created=await api('missions',{...input,provider:'codex'});await api('missions/'+created.id+'/start',{});location.hash='overview';await refresh();return created;}});
   register({name:'run_free_demo_cycle',description:'Create a synthetic proposal, ballots, zero-cost demo job, artifact, and review, then refresh the dashboard. No inference.',inputSchema:schema,annotations:{readOnlyHint:false,untrustedContentHint:false},execute:async input=>{validate(input);const result=await api('demo',{});await refresh();return result;}});
 }

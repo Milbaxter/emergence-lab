@@ -129,17 +129,60 @@ class Missions:
         db.execute("INSERT INTO mission_messages VALUES(?,?,?,?,?,?,?,?)",
                    (uid("message"),mid,tid,sender,recipient,body,kind,now()))
 
+    @staticmethod
+    def _overview(db,missions):
+        checked={r['mission_id']:r['count'] for r in db.execute('''SELECT mission_id,COUNT(*) AS count
+            FROM mission_claims WHERE status='peer_checked' GROUP BY mission_id''')}
+        # A finished mission is not necessarily a useful result. Count only reports
+        # whose current edition exists and whose underlying finding is still checked.
+        ready_from='''FROM mission_reports r JOIN mission_claims c ON c.id=r.claim_id
+            JOIN mission_report_versions v ON v.id=r.current_version AND v.report_id=r.id
+            JOIN missions m ON m.id=r.mission_id
+            WHERE r.status='ready' AND c.status='peer_checked' '''
+        ready={r['mission_id']:r['count'] for r in db.execute(
+            'SELECT r.mission_id,COUNT(*) AS count '+ready_from+' GROUP BY r.mission_id')}
+        fields=('total','running','paused','ready','completed','exhausted','failed','checked_findings','ready_reports')
+        counts={group:dict.fromkeys(fields,0) for group in ('all','live','demo')}
+        for mission in missions:
+            mission['checked_findings_count']=checked.get(mission['id'],0)
+            mission['ready_reports_count']=ready.get(mission['id'],0)
+            for group in ('all','demo' if mission['provider']=='demo' else 'live'):
+                bucket=counts[group]
+                bucket['total']+=1
+                bucket[mission['status']]+=1
+                bucket['checked_findings']+=mission['checked_findings_count']
+                bucket['ready_reports']+=mission['ready_reports_count']
+        overview={'counts':counts}
+        # Separate limits keep recent rehearsals from hiding real research notes.
+        for key,provider_name,limit in (('recent_reports','codex',5),('demo_reports','demo',3)):
+            reports=[]
+            for row in db.execute('''SELECT r.id,r.mission_id,m.title AS mission_title,m.provider,
+                r.status,r.claim_id,c.status AS claim_status,r.created_at,r.updated_at,v.content_json '''+
+                ready_from+' AND m.provider=? ORDER BY r.updated_at DESC,r.rowid DESC LIMIT ?',
+                (provider_name,limit)):
+                report=dict(row)
+                content=json.loads(report.pop('content_json'))
+                report.update({field:content.get(field,'') for field in ('title','takeaway','next_step')})
+                reports.append(report)
+            overview[key]=reports
+        return overview
+
     def state(self,identifier=None):
         with self.lab.tx() as db:
-            missions=[dict(r) for r in db.execute("SELECT * FROM missions ORDER BY created_at DESC")]
+            missions=[dict(r) for r in db.execute("SELECT * FROM missions ORDER BY created_at DESC,rowid DESC")]
             for m in missions:
-                m["calls_used"]=db.execute("SELECT COUNT(*) FROM mission_turns WHERE mission_id=?",(m["id"],)).fetchone()[0]
+                m.update(calls_used=0,input_tokens=0,output_tokens=0)
                 m["context"]=json.loads(m.pop("context_json"))
-                rows=db.execute("SELECT usage_json FROM mission_turns WHERE mission_id=?",(m["id"],)).fetchall()
-                m["input_tokens"]=sum(json.loads(r[0] or "{}").get("tokens",{}).get("input_tokens",0) for r in rows)
-                m["output_tokens"]=sum(json.loads(r[0] or "{}").get("tokens",{}).get("output_tokens",0) for r in rows)
+            by_id={m['id']:m for m in missions}
+            for row in db.execute('SELECT mission_id,usage_json FROM mission_turns'):
+                m=by_id[row['mission_id']]
+                tokens=json.loads(row['usage_json'] or '{}').get('tokens',{})
+                m['calls_used']+=1
+                m['input_tokens']+=tokens.get('input_tokens',0)
+                m['output_tokens']+=tokens.get('output_tokens',0)
             selected=identifier or (missions[0]["id"] if missions else None)
-            result={"missions":missions,"executor":capability(),"selected":selected}
+            result={"missions":missions,"executor":capability(),"selected":selected,
+                    "overview":self._overview(db,missions)}
             for name in ("turns","messages","experiments","claims"):
                 result[name]=[dict(r) for r in db.execute("SELECT * FROM mission_"+name+" WHERE mission_id=? ORDER BY "+("ordinal" if name=="turns" else "created_at"),(selected,))]
             # Prompt context can be large; responses, provenance, and receipts remain inspectable.

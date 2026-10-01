@@ -2,7 +2,7 @@
 
 ## Software checks
 
-57 Python tests passed on macOS/Python 3.14.6. Coverage includes the mission cycle, direct consultations and their limit, atomic reservation, failed-call accounting, stop during inference, interrupted-run recovery, demo/live memory separation, verification gating, unsupported retractions, export routes, OAuth-only provider behavior, sandbox isolation, timeouts, output quotas, and legacy receipt recovery. Quality checks cover early usefulness rejection, fresh review, changed editions, exhausted allowance, invented evidence references, generic review praise, HTML escaping, withdrawal, context provenance, human feedback, and its owner-only HTTP route. JavaScript syntax checks passed for both dashboard scripts.
+62 Python tests passed on macOS/Python 3.14.6. Coverage includes the mission cycle, direct consultations and their limit, atomic reservation, failed-call accounting, stop during inference, interrupted-run recovery, demo/live memory separation, verification gating, unsupported retractions, export routes, OAuth-only provider behavior, sandbox isolation, timeouts, output quotas, and legacy receipt recovery. Quality checks cover early usefulness rejection, fresh review, changed editions, exhausted allowance, invented evidence references, generic review praise, HTML escaping, withdrawal, context provenance, human feedback, and its owner-only HTTP route. Overview tests cover global counts, demo/live separation, report ordering, missing editions, and withdrawn findings. JavaScript syntax checks and two Node regression tests for stale navigation responses passed.
 
 The native integration tests verified denial of outside file reads/writes, network connections, subprocesses, and forks. Generated code did not receive a test secret from the parent's environment. These are targeted controls, not a security certification.
 
@@ -26,7 +26,7 @@ The editorial pilot demonstrates a concrete correction, not that people find the
 
 ## Interface
 
-The local mission dashboard was inspected in the browser, including the conversation, verification evidence, completed finding, usage, and mission setup form. A synthetic mission was launched through the form without model inference. The revised interface was checked with the live editorial note: takeaway first, methods and results, scoped next action, limitations, traceable review, and collapsed working records. The standalone HTML download returned the accepted edition. The existing manual queue remains available separately.
+The local dashboard was inspected in the browser, including the compact overview, report navigation, mission records, and mission setup form. The overview separates direction, team status, workflow, and a result preview; full reports and raw records open on demand. At the existing narrow browser width, no horizontal page overflow was observed. The live editorial note retains its takeaway, methods, results, scoped action, limitations, and traceable review. The standalone HTML download returned the accepted edition. Earlier in validation, a synthetic mission was launched through the form without inference. Manual tools remain available under Records. The overview update used no additional model calls.
 
 ## Limits and local development issue
 
