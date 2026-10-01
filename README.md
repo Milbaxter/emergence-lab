@@ -1,147 +1,112 @@
 # Emergence Lab
 
-A local research workspace for testing whether coordinated agents can do better work together.
+A local, open-source research team that chooses questions, critiques methods, runs experiments, and updates shared findings within a mission you set.
 
-The long-term hypothesis is that useful collective intelligence can emerge from many interacting agents. This MVP makes questions, evidence, disagreements, execution, resource receipts, and reviews inspectable. It does **not** claim AGI or demonstrated emergent intelligence.
+**You set the direction and allowance. Agents make routine research decisions without approval clicks.** The long-term hypothesis is that interaction can improve collective intelligence. This release makes that hypothesis testable; it does not demonstrate AGI, superintelligence, or spontaneous self-organization.
 
-**Pilot:** one owner, four agent roles, local storage, OpenAI subscription inference through Codex OAuth, and off-chain advisory governance. No API keys, blockchain, token issuance, hosting bill, or automatic spending.
+Pilot: one owner, four roles, ChatGPT subscription inference through the official Codex CLI, local SQLite, and off-chain rules. No API-key provider, external hosting, token issuance, or automatic purchases.
 
-## Run it
+## Start a mission
 
-Requires Python 3.11+ on macOS or Linux. The app has no Python runtime dependencies.
+Python 3.11+; no Python runtime dependencies. **Generated experiment execution currently requires macOS with a working Seatbelt sandbox.** On Linux, the dashboard and inference work, but generated code is retained without execution and findings cannot become peer checked. Windows is not supported.
 
-~~~sh
-git clone https://github.com/milbaxter/emergence-lab.git
+```sh
+git clone https://github.com/Milbaxter/emergence-lab.git
 cd emergence-lab
 python3 -m emergence serve
-~~~
+```
 
-Open **http://127.0.0.1:7331**. Click **Run a free demo cycle** to rehearse a proposal, four synthetic ballots, a job, an artifact, and a separate critic review. The rehearsal uses fixed responses and no inference. Demo findings never count as accepted research.
+Open **http://127.0.0.1:7331**. Choose **New mission**, enter a research direction, and set the maximum calls, research cycles, and deadline. Choose **Synthetic rehearsal** first if you want to inspect the workflow without inference.
 
-State lives in the ignored **.emergence/** directory. Select another workspace with the global option before the command:
+For live research, install the [official Codex CLI](https://developers.openai.com/codex/cli), then sign in:
 
-~~~sh
-python3 -m emergence --data-dir /path/to/private/lab serve --port 7331
-~~~
-
-Server and workers must use the **same data directory**. Leave the server running in one terminal.
-
-## Use your OpenAI subscription
-
-Install the [official Codex CLI](https://developers.openai.com/codex/cli), then sign in with ChatGPT:
-
-~~~sh
+```sh
 codex login
 codex login status
-~~~
+```
 
-The adapter requires a recent CLI with **--ignore-user-config** support; developed against **0.155.1**. Login must report **Logged in using ChatGPT**. Emergence Lab never reads or copies your OAuth tokens. Codex owns authentication.
+Login must report **Logged in using ChatGPT**. The adapter was developed against CLI 0.155.1 and requires `--ignore-user-config`. Emergence Lab never reads or copies OAuth credentials. Codex owns authentication.
 
-1. Open a proposal in the dashboard.
-2. Choose **Ask an agent**, select a role, and queue a $0 deliberation job.
-3. In another terminal, run the corresponding role:
+A finite mission can also run directly from your terminal:
 
-~~~sh
-python3 -m emergence worker --agent critic --provider codex --once
-~~~
+```sh
+# Fixed-response rehearsal; no model calls.
+python3 -m emergence mission --provider demo --calls 12 --cycles 2
 
-The agent receives the proposal, discussion, prior ballots, source index, and accepted non-demo memory. It returns a structured advisory ballot and an artifact. You approve the proposal, queue research, and run a matching worker:
+# Your subscription; up to 12 attempts across two research cycles.
+python3 -m emergence mission --provider codex --calls 12 --cycles 2 --minutes 20 \
+  --objective "Find and test a practical improvement to evidence-aware agent memory."
+```
 
-~~~sh
-python3 -m emergence worker --agent researcher --provider codex --once
-~~~
+Add `--model MODEL_ID` to select an available model explicitly. Otherwise the Codex default is recorded as an unpinned alias. To choose a private data directory, put `--data-dir /path/to/lab` **before** `serve` or `mission`. The dashboard and CLI must use the same directory to share state.
 
-Each invocation handles at most **one job by default**. For deliberate polling, omit --once; it waits for one eligible job and exits after that job. Increase --max-jobs only intentionally.
+## What agents can decide
 
-**Subscription usage is real usage.** OAuth jobs consume your signed-in account's allowance. A $0 API-spend receipt does not mean zero tokens or unlimited access. The CLI's usage counters are retained when available. There is no API fallback or automatic purchase of credits.
-
-The adapter forces ChatGPT login and the OpenAI provider, removes API-key environment variables from its child process, ignores user CLI configuration, uses an empty temporary working directory, a read-only sandbox, and disables shell, apps, plugins, hooks, browser, and subagent features. It produces text notes; it does not execute suggested experiments or browse cited pages. No OAuth credential enters the dashboard or exports.
-
-**EMERGENCE_CODEX_TIMEOUT_SECONDS** optionally sets the subprocess deadline (default 180, allowed 15–600). This is not a hard token cap. A timed-out session may have consumed subscription allowance.
-
-See official [authentication](https://developers.openai.com/codex/auth), [non-interactive execution](https://developers.openai.com/codex/noninteractive), and [configuration](https://developers.openai.com/codex/config-reference) documentation.
-
-## What is implemented
-
-| Area | Working behavior |
+| Stage | Autonomous decision |
 |---|---|
-| Research atlas | Eight sourced starting points across the AI stack; add/search sources and evidence levels |
-| Proposals | Hypothesis, baseline, evaluation, deliverables, project ceiling, discussion |
-| Deliberation | Agent ballots through jobs; one current ballot per role; delegated ballots also supported |
-| Governance | Advisory ballots, owner approval/rejection, project closure; all roles share one owner |
-| Queue | Atomic claim, role matching, heartbeat, pause, cancellation, stopped-worker recovery |
-| Memory | Accepted non-demo artifacts, recent discussion, and ballots supplied as bounded context |
-| Findings | Text artifacts, provider metadata, resource receipts, downloads, separate reviewer identity |
-| Accounting | Integer microdollars, atomic reservations, unknown-cost holds, ceiling at most $90/month; subscription counters stay separate |
-| Experiments | Four workflows, deterministic repair-selection grader, immutable per-call JSON reports |
-| Portability | SQLite persistence, JSON export, no hosted database |
+| Scout | Select a narrow question, hypothesis, sources, baseline, and success criterion |
+| Critic | Challenge confounds and propose a stronger experiment |
+| Researcher | Write a Python experiment incorporating the critique |
+| Critic | Inspect the executed code and receipt; write separate checks or an ablation |
+| Critic after execution | Assess the observed verification result and accept or reject the scoped evidence |
+| Coordinator | Accept, revise once, or retain an inconclusive result; choose the next question |
 
-The seeded atlas is a **source map**, not a continuously updated state-of-the-art leaderboard. Entries are marked source-reported, with limitations. A source URL supplied to an agent is not proof the agent read it.
+Agents see each other's messages and actual execution receipts. They can address a focused question to another role, which replies before the caller continues. There are at most two such consultations per cycle. The coordinator can request one revision, consuming the same finite call allowance.
 
-## Coordination smoke suite
+This is a **designed research protocol with adaptive decisions**, not a free-form swarm. Roles run serially on the same subscription. There is no majority vote pretending that four roles are four independent people. Public enrollment, multiple workgroups, and on-chain governance are later stages.
 
-~~~sh
-python3 -m emergence experiment --provider demo
-~~~
+The dashboard shows the mission, conversation, current question, calls and recorded tokens, generated code, executable evidence, findings, and amendment history. It updates while a mission runs. You can pause or stop at the mission level.
 
-This checks the plumbing using synthetic responses through the actual candidate mapper and grader. It compares:
+## Evidence and memory
 
-- One agent revising its answer over four calls.
-- Four independent answers with deterministic majority selection.
-- Three independent proposals followed by one reviewer.
-- Four calls with a shared notebook carried across tasks.
+An experiment is a standard-library Python program executed automatically in a separate workspace. Verification receives the actual program as `subject.py` and must add checks. The runner records code hashes, output, exit status, and limits.
 
-The public toy tasks select among fixed repairs for first-index lookup, chunking, median, and interval merging. The program never executes model-generated code.
+A finding becomes **peer checked** only when both programs execute successfully, verification outputs `verified: true`, and both critic and coordinator accept. This is a workflow label, not proof of scientific truth: checks can be weak, leaked, or wrong. Unsupported conclusions stay provisional.
 
-To deliberately run the full suite on your subscription:
+Recent non-retracted findings are supplied to subsequent turns and missions. Synthetic rehearsal memory is partitioned from live memory. Coordinators can retract or supersede claims they actually received, with an audit trail. Unsupported correction attempts are recorded as disputes without silently deleting checked knowledge. Dependency tracking and automatic reassessment of downstream claims are not implemented.
 
-~~~sh
-python3 -m emergence experiment --provider codex
-~~~
+Source URLs are provenance, not proof of retrieval or truth. Scouts have Codex's built-in web search; available search events are retained. Other roles use supplied context. Long context is bounded; full records stay in SQLite and export. Programs should emit compact metrics with primary results first. The seeded research atlas remains a starting map, not a live state-of-the-art ranking.
 
-**A complete run makes up to 64 Codex invocations.** The dashboard and tests never launch it automatically. All conditions have the same call cap; token consumption and latency can differ. Reports include raw outputs, usage, randomized task/condition ordering, seed, model alias, and limitations. Immutable reports live under .emergence/experiments/JOB_ID.json; --out additionally writes a convenience copy. Artifacts record the immutable path and SHA-256.
+## Subscription and resource limits
 
-The tasks are public and small, model aliases can move, and a single run does not demonstrate general intelligence. Before scientific claims, add held-out tasks, pinned models, independent seeds, matched total-resource controls, memory ablations, and independent replication.
+- Only `codex` (ChatGPT OAuth) and `demo` inference are supported. API-key login is rejected and API-key environment variables are removed. There is no billed API fallback.
+- Subscription usage is real usage. A zero API-spend receipt does not mean zero tokens or unlimited access. Recorded token counters are displayed; this app cannot guarantee a token ceiling or read your remaining account allowance.
+- The allowance is **attempts**, including failed or interrupted invocations. A request is reserved atomically before inference. Retries, consultations, and revisions consume the same allowance.
+- One mission runner per data directory. Defaults: 12 attempts, two cycles, 20-minute scheduling deadline. A cycle needs at least six turns; revisions or consultations may leave room for only one cycle.
+- Pausing/stopping or reaching the deadline prevents subsequent work once the current operation returns. An in-flight Codex request may finish and consume allowance. Stopping does not cancel a request at the provider.
+- Provider errors pause the mission without silently resending the request. Restart recovery preserves recorded receipts and consumed slots. A manual resume is an exceptional mission-level action and may repeat the interrupted stage with a new slot; there is no exactly-once inference guarantee.
+- `EMERGENCE_CODEX_TIMEOUT_SECONDS` sets each CLI subprocess timeout (default 180; range 15–600). A scheduling deadline can be exceeded by an already-running invocation.
 
-## Recovery and budget semantics
+The original $90/month cash ledger belongs to the manual job queue. Autonomous subscription missions use their separate call allowance; neither ledger measures remaining ChatGPT quota.
 
-- Approving a project creates a ceiling; queuing a job reserves its allowance. These are not double counted.
-- The ledger counts settlements in the UTC month of completion/manual settlement. All outstanding reservations carry across months.
-- Cancelling a queued job releases its hold. Cancelling a running job requests a stop; a provider call may still finish.
-- If a worker died, **stop it first**, then use **Recover stopped worker**. Execution becomes failed; any cash hold remains until manual settlement.
-- Unknown cash cost differs from zero. Overruns are recorded fully and pause claims. Resume is blocked until commitments fit the ceiling.
-- Completion receipts are idempotent; conflicting replays are rejected. The worker saves a private pending receipt before submission and replays that receipt on restart. It never automatically repeats inference.
-- Creating proposals/jobs is not idempotent. Inspect the queue before retrying a lost enqueue response.
-- Subscription jobs should have a $0 cash cap. The ledger is groundwork for later resource governance and does not enforce subscription quota.
+## Execution boundary
 
-## Trust and limits
+The Codex subprocess ignores user configuration, uses an empty temporary directory and a read-only sandbox, disables shell/apps/plugins/hooks/subagents, and returns structured text. Experiment execution is a separate component.
 
-This is a **trusted, single-user localhost application**. The owner interface uses loopback access and same-origin request checks. It is not an authentication boundary against another local program: local processes can act as the owner. Worker credentials scope normal worker requests; they do not create a multi-user security model.
+On macOS, a capability probe checks the native sandbox before generated code runs. Programs receive no inherited credentials or user environment, no network access, no child processes, and no access to personal file contents. Reads are limited to the Python runtime, required system files, and the experiment workspace; metadata permissions support Python startup. Writes stay in the workspace. There is no unsandboxed fallback.
 
-Do not expose the server through a public tunnel. Public enrollment, distinct owners, Sybil resistance, contribution scoring, authenticated owner sessions, remote worker isolation, and federation are future work.
+Limits: eight CPU seconds, 12 wall seconds, 64 KB per output file, 128 workspace entries, and 2 MB workspace size. A 256 MB RSS watchdog is **best effort**, not a hard RAM boundary; sampling and disk checks can overshoot. Seatbelt is a deprecated native facility, not a VM. This pilot is for your own agents, not hostile public submissions. Public workers should use a validated disposable VM/container service with hard resource limits.
 
-Separate agent review is not independent human replication. “Accepted” records a review decision, not a guaranteed true claim. Artifacts render as escaped text. Other agents' notes are untrusted evidence.
+The localhost dashboard trusts local processes and uses Host/Origin checks; it is not multi-user owner authentication. Keep it on loopback. Agents cannot purchase resources, contact people, publish findings externally, or modify the application through their available tools.
 
-Exports contain research prompts and artifacts. Inspect them before sharing. Import/restore from JSON is not implemented. Back up the whole private data directory while the server is stopped.
+## Research design and next experiments
 
-## Development
+The architecture draws on [AI co-scientist](https://research.google/blog/accelerating-scientific-breakthroughs-with-an-ai-co-scientist/), [AI Scientist-v2](https://arxiv.org/html/2504.08066v1), and [Agent Laboratory](https://arxiv.org/html/2501.04227v1). See [design notes and an evaluation plan](docs/autonomy-design.md) for what transfers to a subscription-sized pilot and what remains unproven.
 
-~~~sh
+The next scientific question is whether interaction helps **at matched resources**: compare one iterative agent, independent attempts, and this interacting team on fresh externally graded tasks. Log tokens and wall time, run multiple seeds, and remove shared memory or critic feedback in ablations. The existing four-task repair-selection suite is only a legacy smoke test and does not evaluate the new mission loop.
+
+## Data and development
+
+Private state lives in ignored `.emergence/`. Export includes the manual lab plus all mission prompts, responses, usage, messages, code, receipts, claims, and history. Inspect before sharing. JSON import is not implemented; back up the data directory with all runners stopped.
+
+```sh
 python3 -m unittest discover -s tests -v
 node --check emergence/static/app.js
-~~~
+node --check emergence/static/missions.js
+```
 
-Tests use temporary databases, loopback HTTP, fake Codex subprocesses, and synthetic inference. They consume no subscription allowance or API credits.
+Tests use temporary state, fake inference, and local sandbox probes. They consume no model allowance. GitHub Actions remains an **inactive template** in `docs/ci-workflow.yml`; enabling it requires workflow-write permission.
 
-A GitHub Actions matrix for Python 3.11–3.14 is provided in **docs/ci-workflow.yml**. It is a template, not an active workflow. To enable it, an account with workflow-write permission can copy it to .github/workflows/checks.yml.
+The [legacy manual workflow](docs/manual-workflow.md) documents the earlier queue, ballots, and repair suite. It is retained for compatibility; use Missions for autonomous work.
 
-The code separates the SQLite state machine, HTTP server, worker, subscription adapter, grader, and static dashboard. The browser optionally exposes a WebMCP state and free-rehearsal tools when supported.
-
-## Next milestones
-
-1. Run a small real research cycle; inspect disagreement and review quality.
-2. Add subscription-call allocation, private held-out suites, tool sandboxes, and agent-authored proposals.
-3. Add independently authenticated contributors, signed provenance, and reputation based on reproduced work.
-4. Add on-chain governance after the off-chain contribution rules survive actual use.
-
-MIT licensed. Contributions should include a falsifiable question, reproducible evidence, resource accounting, and limitations.
+MIT licensed.

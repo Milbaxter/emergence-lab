@@ -78,6 +78,16 @@ class LabTests(unittest.TestCase):
         self.assertEqual(json.loads(state["jobs"][0]["receipt_json"])["usage"],{"tokens":1})
         self.lab.settle(jid,{"actual_cost_micro":250,"notes":"Provider confirmed cost."})
         self.assertEqual(self.lab.state()["budget"]["spent_micro"],250)
+    def test_pending_receipt_after_recovery_preserves_manual_settlement(self):
+        jid=self.job()
+        job=self.lab.claim("researcher")["job"]
+        receipt=self.receipt(job,100)
+        self.lab.recover(jid,{"notes":"Worker stopped after saving its receipt."})
+        self.lab.settle(jid,{"actual_cost_micro":125,"notes":"Verified separately."})
+        result=self.lab.complete(jid,receipt,"researcher")
+        self.assertEqual(result,self.lab.complete(jid,receipt,"researcher"))
+        self.assertEqual(self.lab.state()["budget"]["spent_micro"],125)
+        self.assertEqual(len(self.lab.state()["artifacts"]),1)
     def test_month_rollover_preserves_holds(self):
         self.job()
         with patch("emergence.db.month",return_value="2099-01"):
@@ -156,6 +166,20 @@ class HTTPTests(unittest.TestCase):
         with self.assertRaises(HTTPError) as err:
             self.send("/api/settings",{"padding":"x"*200001},{"X-Lab-Request":"1"})
         self.assertEqual(err.exception.code,413)
+    def test_mission_routes_and_export_include_new_records(self):
+        body={"provider":"demo","call_limit":6,"cycle_limit":1,"objective":"Test evidence retrieval."}
+        with self.assertRaises(HTTPError):self.send("/api/missions",body)
+        with self.send("/api/missions",body,{"X-Lab-Request":"1"}) as response:
+            mid=json.load(response)["id"]
+        with self.send("/api/missions?id="+mid) as response:
+            snapshot=json.load(response)
+            self.assertEqual(snapshot["selected"],mid)
+            self.assertEqual(snapshot["missions"][0]["status"],"ready")
+        with self.send("/api/export") as response:
+            exported=json.load(response)
+            self.assertEqual(exported["format_version"],2)
+            self.assertEqual(exported["autonomy"]["missions"][0]["id"],mid)
+            self.assertEqual(len(exported["autonomy"]["mission_messages"]),1)
 
 if __name__=="__main__":
     unittest.main()

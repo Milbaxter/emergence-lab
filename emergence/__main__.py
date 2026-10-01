@@ -21,6 +21,13 @@ def main():
     experiment.add_argument("--out", default=".emergence/experiments/latest.json")
     experiment.add_argument("--max-cost-usd", default="1")
     sub.add_parser("demo", help="Run the zero-cost workflow rehearsal")
+    mission = sub.add_parser("mission",help="Run an autonomous research mission without intermediate approvals")
+    mission.add_argument("--objective",default=None)
+    mission.add_argument("--provider",choices=["demo","codex"],default="demo")
+    mission.add_argument("--calls",type=int,default=12)
+    mission.add_argument("--cycles",type=int,default=2)
+    mission.add_argument("--minutes",type=int,default=20)
+    mission.add_argument("--model",default="")
     args = parser.parse_args()
     if args.command == "serve":
         from .server import serve
@@ -31,6 +38,19 @@ def main():
     elif args.command == "experiment":
         from .experiment import run
         run(args)
+    elif args.command=="mission":
+        from .autonomy import Missions,run_mission,DEFAULT_OBJECTIVE
+        from .db import Lab
+        import json
+        lab=Lab(args.data_dir)
+        missions=Missions(lab)
+        identifier=missions.create({"objective":args.objective or DEFAULT_OBJECTIVE,"provider":args.provider,
+                                    "call_limit":args.calls,"cycle_limit":args.cycles,"minutes":args.minutes,
+                                    "model":args.model})["id"]
+        missions.control(identifier,"start")
+        print("Autonomous mission: "+identifier,flush=True)
+        result=run_mission(lab,identifier)
+        print(json.dumps(next(m for m in result["missions"] if m["id"]==identifier),indent=2))
     else:
         from .db import Lab
         from .demo import rehearse

@@ -374,8 +374,15 @@ class Lab:
                 if job["completion_hash"] != fingerprint:
                     raise LabError("Conflicting duplicate completion.", 409)
                 return json.loads(job["completion_json"])
-            if job["status"] not in {"running", "cancel_requested"}:
+            recovered=job["status"]=="failed" and not job["completion_hash"]
+            if job["status"] not in {"running", "cancel_requested"} and not recovered:
                 raise LabError("This job is not running.", 409)
+            # A valid saved receipt can arrive after owner recovery. Preserve any
+            # manual settlement while clearing the worker's durable pending receipt.
+            settled_month=month() if actual is not None else None
+            if recovered and job["actual_cost_micro"] is not None:
+                actual=job["actual_cost_micro"]
+                settled_month=job["settled_month"]
             artifact_id = None
             if status == "completed":
                 a = p.get("artifact")
@@ -403,7 +410,7 @@ class Lab:
             result = {"ok": True, "artifact_id": artifact_id, "unsettled": actual is None}
             db.execute("""UPDATE jobs SET status=?,actual_cost_micro=?,settled_month=?,finished_at=?,
                           completion_hash=?,completion_json=? WHERE id=?""",
-                       (status, actual, month() if actual is not None else None, now(), fingerprint, json.dumps(result), identifier))
+                       (status, actual, settled_month, now(), fingerprint, json.dumps(result), identifier))
             note = "Spend unknown; reservation retained." if actual is None else f"Recorded USD {actual / MICRO:.4f}."
             self.event(db, "completed" if status == "completed" else "failed", actor, f"{job['title']}: {status}. {note}")
             if actual is not None and actual > job["max_cost_micro"]:

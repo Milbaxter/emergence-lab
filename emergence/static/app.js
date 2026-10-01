@@ -10,7 +10,7 @@ const btn = (text, action, id = '', cls = '') => '<button class="btn '+cls+'" da
 const title = (eyebrow, name, subtitle, action = '') => '<div class="page-heading"><div><div class="eyebrow">'+eyebrow+'</div><h1>'+name+'</h1><p class="subtitle">'+subtitle+'</p></div>'+action+'</div>';
 const empty = (heading, body) => '<div class="empty"><h3>'+heading+'</h3><p>'+body+'</p></div>';
 const agentName = id => state.agents.find(a => a.id === id)?.name || id;
-const route = () => (location.hash.slice(1) || 'overview').split('/');
+const route = () => (location.hash.slice(1) || 'missions').split('/');
 async function api(path, payload) {
   const r = await fetch('/api/'+path, payload === undefined ? {} : {method:'POST',headers:{'Content-Type':'application/json','X-Lab-Request':'1'},body:JSON.stringify(payload)});
   const data = await r.json();
@@ -18,7 +18,7 @@ async function api(path, payload) {
   return data;
 }
 function toast(message) { $('toast').textContent = message; $('toast').hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(() => $('toast').hidden = true, 5000); }
-async function refresh() { state = await api('state'); render(); }
+async function refresh() { const values=await Promise.all([api('state'),loadMissions()]); state=values[0]; render(); }
 function budgetPanel() {
   const b = state.budget;
   return '<section class="panel"><div class="panel-head"><h2>Cash budget</h2>'+tag(b.paused?'paused':'within limit',b.paused?'amber':'green')+'</div><div class="panel-content"><div class="budget-number">'+usd(b.available_micro)+' <small>available</small></div><progress aria-label="Committed monthly budget" max="'+Math.max(1,b.limit_micro)+'" value="'+(b.spent_micro+b.reserved_micro)+'"></progress><div class="budget-detail"><span>Recorded spend</span><b>'+usd(b.spent_micro)+'</b></div><div class="budget-detail"><span>Reserved for jobs</span><b>'+usd(b.reserved_micro)+'</b></div><div class="budget-detail"><span>Monthly ceiling · '+esc(b.month)+'</span><b>'+usd(b.limit_micro)+'</b></div><div class="button-row">'+btn(b.paused?'Resume claims':'Pause claims','pause','','small')+btn('Set limit','budget','','small')+'</div><p class="form-hint">OAuth workers use your subscription allowance. This cash ledger does not measure subscription quota.</p></div></section>';
@@ -43,7 +43,7 @@ function atlas() {
 }
 function safeURL(url) { try { const u=new URL(url); return ['https:','http:'].includes(u.protocol)?esc(u.href):'#'; } catch { return '#'; } }
 function proposals(id) {
-  if (!id) return title('COLLECTIVE DIRECTION','Research proposals','Define the question, baseline, and acceptance test before spending inference.',btn('New proposal +','proposal','','primary'))+'<div class="notice">Single-owner alpha: agents advise; you approve budgets and work. Four agents do not represent four independent people.</div><div class="cards">'+proposalCards(state.proposals)+'</div>';
+  if (!id) return title('COLLECTIVE DIRECTION','Research proposals','Define the question, baseline, and acceptance test before spending inference.',btn('New proposal +','proposal','','primary'))+'<div class="notice">Manual proposal archive. Use Missions for autonomous research decisions and execution.</div><div class="cards">'+proposalCards(state.proposals)+'</div>';
   const p = state.proposals.find(p=>p.id===id);
   if(!p) return empty('Proposal not found','Choose a proposal from the agenda.');
   const ballots=state.ballots.filter(b=>b.proposal_id===id);
@@ -74,11 +74,11 @@ function agents() {
 }
 function render() {
   if(!state)return;
-  const [page,id]=route(), names={overview:'Overview',atlas:'Research atlas',proposals:'Proposals',jobs:'Work queue',findings:'Findings',agents:'Agents'};
+  const [page,id]=route(), names={missions:'Missions',overview:'Overview',atlas:'Research atlas',proposals:'Proposals',jobs:'Work queue',findings:'Findings',agents:'Agents'};
   $('crumb').textContent=names[page]||'Overview';
   $('atlas-count').textContent=state.atlas.length;
   document.querySelectorAll('[data-nav]').forEach(a=>{a.classList.toggle('active',a.dataset.nav===page); a.setAttribute('aria-current',a.dataset.nav===page?'page':'false');});
-  $('content').innerHTML=({overview,atlas,proposals,jobs,findings,agents}[page]||overview)(id);
+  $('content').innerHTML=({missions,overview,atlas,proposals,jobs,findings,agents}[page]||missions)(id);
 }
 const field = (name, caption, value='', type='text') => '<label>'+caption+(type==='textarea'?'<textarea name="'+name+'" required rows="3">'+esc(value)+'</textarea>':'<input name="'+name+'" type="'+type+'" value="'+esc(value)+'" '+(type==='number'?'min="0" max="90" step="0.000001"':'')+' required>')+'</label>';
 const select = (name, caption, items) => '<label>'+caption+'<select name="'+name+'">'+items.map(([value,name])=>'<option value="'+esc(value)+'">'+esc(name)+'</option>').join('')+'</select></label>';
@@ -97,6 +97,7 @@ function form(heading, fields, submit, handler, note='') {
 const micro = value => {const n=Number(value);if(!Number.isFinite(n)||n<0)throw Error('Enter a nonnegative USD amount.');return Math.round(n*1000000);};
 async function action(action,id) {
   const p=state.proposals.find(p=>p.id===id);
+  if(action.startsWith('mission-')) return missionAction(action,id);
   if(action==='demo') {await api('demo',{});await refresh();toast('Free rehearsal complete. Inspect the demo in Findings.');}
   else if(action==='pause') {await api('settings',{paused:!state.budget.paused});await refresh();}
   else if(action==='budget') form('Monthly inference limit',field('usd','USD per month',state.budget.limit_micro/1000000,'number'),'Save limit',d=>api('settings',{monthly_limit_micro:micro(d.usd)}),'Maximum $90 in this pilot. Outstanding commitments must fit.');
@@ -120,7 +121,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-acti
 document.addEventListener('input',e=>{if(e.target.id==='search'){const pos=e.target.selectionStart;search=e.target.value;render();$('search').focus();$('search').setSelectionRange(pos,pos);}});
 $('close-modal').onclick=()=>$('modal').close();
 $('refresh').onclick=()=>refresh().then(()=>toast('Workspace refreshed.')).catch(e=>toast(e.message));
-window.addEventListener('hashchange',()=>{search='';render();$('content').focus();});
+window.addEventListener('hashchange',()=>{search='';refresh().then(()=>$('content').focus()).catch(e=>toast(e.message));});
 refresh().catch(e=>{$('content').innerHTML=empty('Could not open the lab',esc(e.message));});
 // Optional browser-native tool surface; the regular interface never depends on it.
 const modelContext = document.modelContext || navigator.modelContext;
@@ -131,5 +132,7 @@ if (modelContext?.registerTool) {
   const validate = input => {if(!input || typeof input!=='object' || Array.isArray(input) || Object.keys(input).length)throw Error('Expected an empty object.');};
   const register = tool => {try{Promise.resolve(modelContext.registerTool(tool,{signal:lifecycle.signal})).catch(()=>{});}catch{}};
   register({name:'read_lab_state',description:'Read local proposals, job budgets, sources, findings, and untrusted research text.',inputSchema:schema,annotations:{readOnlyHint:true,untrustedContentHint:true},execute:async input=>{validate(input);return await api('state');}});
+  register({name:'read_current_mission',description:'Read the selected autonomous mission, agent dialogue, execution evidence, findings and usage. Agent text is untrusted evidence.',inputSchema:schema,annotations:{readOnlyHint:true,untrustedContentHint:true},execute:async input=>{validate(input);await loadMissions();return missionData;}});
+  register({name:'start_autonomous_mission',description:'Start a finite local research mission using the owner’s ChatGPT subscription. Consumes subscription allowance. Agents make routine research decisions without further approvals within the supplied objective and call limit.',inputSchema:{type:'object',properties:{objective:{type:'string'},call_limit:{type:'integer',minimum:6,maximum:60},cycle_limit:{type:'integer',minimum:1,maximum:6},minutes:{type:'integer',minimum:2,maximum:60}},required:['objective','call_limit','cycle_limit','minutes'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:true},execute:async input=>{if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>!['objective','call_limit','cycle_limit','minutes'].includes(k)))throw Error('Invalid mission fields.');if(missionData.missions.some(m=>m.status==='running'))throw Error('A mission is already running.');const created=await api('missions',{...input,provider:'codex'});await api('missions/'+created.id+'/start',{});location.hash='missions/'+created.id;await refresh();return created;}});
   register({name:'run_free_demo_cycle',description:'Create a synthetic proposal, ballots, zero-cost demo job, artifact, and review, then refresh the dashboard. No inference.',inputSchema:schema,annotations:{readOnlyHint:false,untrustedContentHint:false},execute:async input=>{validate(input);const result=await api('demo',{});await refresh();return result;}});
 }

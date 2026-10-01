@@ -80,7 +80,7 @@ class CodexSubscription:
             raise InferenceError("Prompt exceeds 100 KB; no subscription call sent.",0)
         return 0
 
-    def generate(self,prompt,cap):
+    def generate(self,prompt,cap,*,schema=None,web_search=False,model=None):
         import subprocess
         import tempfile
         from pathlib import Path
@@ -92,12 +92,18 @@ class CodexSubscription:
                        "--sandbox","read-only","--json","--color","never","--cd",directory,
                        "--output-last-message",str(output),
                        "-c",'forced_login_method="chatgpt"',"-c",'model_provider="openai"',
-                       "-c",'approval_policy="never"',"-c",'web_search="disabled"',
+                       "-c",'approval_policy="never"',"-c",'web_search="'+("live" if web_search else "disabled")+'"',
                        "-c","project_doc_max_bytes=0","-c","mcp_servers={}"]
             for feature in ("shell_tool","apps","plugins","hooks","multi_agent","computer_use",
                             "browser_use","image_generation","in_app_browser","workspace_dependencies"):
                 command += ["-c","features."+feature+"=false"]
             command += ["-c","features.skip_host_skill_discovery=true","-"]
+            if schema is not None:
+                schema_file=Path(directory)/"response-schema.json"
+                schema_file.write_text(json.dumps(schema))
+                command[-1:-1]=["--output-schema",str(schema_file)]
+            if model:
+                command[-1:-1]=["--model",model]
             with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
                 try:
                     process = subprocess.run(command,input=prompt.encode(),stdout=stdout,stderr=stderr,
@@ -107,26 +113,34 @@ class CodexSubscription:
                 stdout.seek(0)
                 raw = stdout.read(2_000_001)
             receipt = {"billing":"chatgpt_subscription","api_spend_micro":0,
-                       "latency_ms":round((time.monotonic()-started)*1000),"configured_model":self.model,
+                       "latency_ms":round((time.monotonic()-started)*1000),"configured_model":model or self.model,
                        "quota_note":"Consumes the signed-in account's subscription allowance. No dollar conversion."}
             completed = False
+            receipt["tool_events"]=[]
             if len(raw)<=2_000_000:
                 for line in raw.splitlines():
                     try:
                         event = json.loads(line)
                     except ValueError:
                         continue
+                    if event.get("type")=="item.completed":
+                        item=event.get("item",{})
+                        if isinstance(item,dict) and item.get("type")=="web_search" and len(receipt["tool_events"])<20:
+                            receipt["tool_events"].append(item)
                     if event.get("type")=="turn.completed":
                         completed = True
                         usage = event.get("usage",{})
                         if isinstance(usage,dict):
-                            receipt["tokens"] = {k:v for k,v in usage.items() if type(v) is int and v>=0}
+                            totals=receipt.setdefault("tokens",{})
+                            for key,value in usage.items():
+                                if type(value) is int and value>=0:
+                                    totals[key]=totals.get(key,0)+value
             if process.returncode or not completed or not output.exists():
                 raise InferenceError("Codex did not finish successfully. Check login, account limits, and CLI version; no API fallback.",0,{**receipt,"usage_unknown":not completed})
             content = output.read_text()
             if not content.strip() or len(content)>100_000:
                 raise InferenceError("Codex returned empty or oversized text.",0,receipt)
-            return Result(content,0,receipt,self.name,self.model)
+            return Result(content,0,receipt,self.name,model or self.model)
 
 def provider(name):
     if name=="demo":

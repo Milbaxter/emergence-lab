@@ -6,7 +6,7 @@ import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, parse_qs
 from .db import Lab, LabError, text
 
 STATIC = Path(__file__).parent / "static"
@@ -17,10 +17,12 @@ class Server(ThreadingHTTPServer):
     def __init__(self, address, lab):
         self.lab = lab
         self.demo_lock = threading.Lock()
+        from .autonomy import MissionManager
+        self.mission_manager = MissionManager(lab)
         super().__init__(address, Handler)
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "EmergenceLab/0.1"
+    server_version = "EmergenceLab/0.2"
     def log_message(self, fmt, *args):
         # No request bodies, credentials, prompts or query strings in logs.
         pass
@@ -99,10 +101,13 @@ class Handler(BaseHTTPRequestHandler):
             path = urlsplit(self.path).path
             if path == "/api/state":
                 self.send(self.lab.state())
+            elif path == "/api/missions":
+                query=parse_qs(urlsplit(self.path).query)
+                self.send(self.server.mission_manager.missions.state(query.get("id",[None])[0]))
             elif path == "/api/health":
-                self.send({"ok": True, "version": "0.1.0"})
+                self.send({"ok": True, "version": "0.2.0"})
             elif path == "/api/export":
-                self.send(self.lab.state(), download="emergence-lab-export.json")
+                self.send({"format_version":2,"lab":self.lab.state(),"autonomy":self.server.mission_manager.missions.export()}, download="emergence-lab-export.json")
             elif re.fullmatch(r"/api/artifacts/[a-zA-Z0-9_]+/download", path):
                 identifier = path.split("/")[3]
                 with self.lab.tx() as db:
@@ -111,7 +116,7 @@ class Handler(BaseHTTPRequestHandler):
                 if artifact["is_demo"]:
                     body = "SYNTHETIC DEMO — fixed responses; not evidence of AI capability.\n\n" + body
                 self.send(body.encode(), content_type="text/plain; charset=utf-8", download=identifier + ".md")
-            elif path in {"/", "/index.html", "/app.js", "/style.css", "/favicon.svg"}:
+            elif path in {"/", "/index.html", "/app.js", "/missions.js", "/style.css", "/favicon.svg"}:
                 file = STATIC / ("index.html" if path == "/" else path[1:])
                 if not file.exists():
                     raise LabError("File not found.", 404)
@@ -144,7 +149,13 @@ class Handler(BaseHTTPRequestHandler):
                     raise LabError("Worker action not found.", 404)
             else:
                 self.owner()
-                if path == "/api/proposals":
+                if path == "/api/missions":
+                    result=self.server.mission_manager.missions.create(p)
+                elif re.fullmatch(r"/api/missions/[a-zA-Z0-9_]+/(start|pause|stop)",path):
+                    identifier,action=path.split("/")[3:5]
+                    result=(self.server.mission_manager.start(identifier) if action=="start"
+                            else self.server.mission_manager.missions.control(identifier,action))
+                elif path == "/api/proposals":
                     result = self.lab.proposal(p)
                 elif path == "/api/atlas":
                     result = self.lab.add_atlas(p)
