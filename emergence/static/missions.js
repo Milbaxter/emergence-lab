@@ -8,7 +8,7 @@ async function loadMissions() {
 }
 function missions() {
   const data=missionData, m=data.missions.find(x=>x.id===data.selected);
-  let html=title('MISSION CONTROL','Work worth someone’s attention.','A clear purpose. Checked evidence. A careful explanation. The team can withhold work that does not meet the bar.',btn('New mission +','mission-new','','primary'));
+  let html=title('MISSION CONTROL','Research missions','A clear purpose. Checked evidence. A careful explanation. The team can withhold work that does not meet the bar.',btn('New mission +','mission-new','','primary'));
   if(!m) return html+'<section class="launch"><div class="eyebrow">YOUR ROLE: BIG PICTURE ORCHESTRATOR</div><h2>One mission. A working research team.</h2><p>Give the agents a research direction and a call allowance. They carry out the investigation together. You can inspect their conversation, pause, or stop the mission at any time.</p>'+btn('Set a research mission →','mission-new','','primary')+'<small>ChatGPT subscription via Codex · no API-key provider · local workspace</small></section>';
   const steps=['explore','challenge','experiment','verify','assess','conclude',...(m.context.quality_version?['write','read']:[])];
   const current=m.context.stage;
