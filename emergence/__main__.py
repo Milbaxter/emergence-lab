@@ -25,7 +25,7 @@ def main():
     mission.add_argument("--objective",default=None)
     mission.add_argument("--provider",choices=["demo","codex"],default="demo")
     mission.add_argument("--calls",type=int,default=12)
-    mission.add_argument("--cycles",type=int,default=2)
+    mission.add_argument("--cycles",type=int,default=1)
     mission.add_argument("--minutes",type=int,default=20)
     mission.add_argument("--model",default="")
     args = parser.parse_args()

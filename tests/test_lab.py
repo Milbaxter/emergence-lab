@@ -167,7 +167,7 @@ class HTTPTests(unittest.TestCase):
             self.send("/api/settings",{"padding":"x"*200001},{"X-Lab-Request":"1"})
         self.assertEqual(err.exception.code,413)
     def test_mission_routes_and_export_include_new_records(self):
-        body={"provider":"demo","call_limit":6,"cycle_limit":1,"objective":"Test evidence retrieval."}
+        body={"provider":"demo","call_limit":8,"cycle_limit":1,"objective":"Test evidence retrieval."}
         with self.assertRaises(HTTPError):self.send("/api/missions",body)
         with self.send("/api/missions",body,{"X-Lab-Request":"1"}) as response:
             mid=json.load(response)["id"]
@@ -180,6 +180,31 @@ class HTTPTests(unittest.TestCase):
             self.assertEqual(exported["format_version"],2)
             self.assertEqual(exported["autonomy"]["missions"][0]["id"],mid)
             self.assertEqual(len(exported["autonomy"]["mission_messages"]),1)
+
+    def test_reports_allow_owner_feedback_and_block_withdrawn_downloads(self):
+        from emergence.autonomy import run_mission
+        missions=self.server.mission_manager.missions
+        mid=missions.create({'provider':'demo','call_limit':8,'cycle_limit':1})['id']
+        missions.control(mid,'start')
+        receipt={'status':'passed','data':{'verified':True},'stdout':'{"verified":true}',
+                 'stderr':'','code_sha256':'fixture'}
+        with patch('emergence.autonomy.run_python',return_value=receipt), patch('emergence.autonomy.capability',return_value={'available':True}):
+            state=run_mission(self.lab,mid)
+        report=state['reports'][0];path='/api/reports/'+report['id']
+        with self.send(path+'/download') as response:
+            self.assertIn('attachment',response.headers['Content-Disposition'])
+            self.assertIn('SYNTHETIC REHEARSAL',response.read().decode())
+        feedback={'value':'useful','reason':'This documents the intended workflow clearly.'}
+        token=self.lab.issue_token('critic')
+        with self.assertRaises(HTTPError) as err:
+            self.send(path+'/feedback',feedback,{'X-Lab-Request':'1','Authorization':'Bearer '+token})
+        self.assertEqual(err.exception.code,403)
+        with self.send(path+'/feedback',feedback,{'X-Lab-Request':'1'}) as response:
+            self.assertTrue(json.load(response)['ok'])
+        with self.lab.tx() as db:
+            db.execute("UPDATE mission_claims SET status='retracted' WHERE id=?",(report['claim_id'],))
+        with self.assertRaises(HTTPError) as err:self.send(path+'/download')
+        self.assertEqual(err.exception.code,409)
 
 if __name__=="__main__":
     unittest.main()

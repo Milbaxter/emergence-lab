@@ -25,7 +25,7 @@ class MissionTests(unittest.TestCase):
         patch('emergence.autonomy.capability',return_value={"available":True}).start()
 
     def create(self,**kwargs):
-        identifier=self.missions.create({"provider":"demo","call_limit":12,"cycle_limit":2,**kwargs})['id']
+        identifier=self.missions.create({"provider":"demo","call_limit":18,"cycle_limit":2,**kwargs})['id']
         self.missions.control(identifier,'start')
         return identifier
 
@@ -33,12 +33,12 @@ class MissionTests(unittest.TestCase):
         mid=self.create()
         state=run_mission(self.lab,mid)
         self.assertEqual(state['missions'][0]['status'],'completed')
-        self.assertEqual(state['missions'][0]['calls_used'],12)
+        self.assertEqual(state['missions'][0]['calls_used'],16)
         self.assertEqual(len(state['claims']),2)
         self.assertEqual(self.execute.call_count,4)
         self.assertTrue(all(c['status']=='peer_checked' for c in state['claims']))
         exported=self.missions.export()
-        second=json.loads(exported['mission_turns'][6]['prompt_json'])
+        second=json.loads(exported['mission_turns'][8]['prompt_json'])
         self.assertTrue(second['state']['next_question'])
         self.assertTrue(second['knowledge'])
         self.assertIn('mission_claim_events',exported)
@@ -57,9 +57,9 @@ class MissionTests(unittest.TestCase):
                     value.update(ask_agent='critic',question_for_agent='Which confound matters most?')
                     r.text=json.dumps(value);self.asked=True
                 return r
-        mid=self.create(call_limit=8,cycle_limit=1)
+        mid=self.create(call_limit=10,cycle_limit=1)
         state=run_mission(self.lab,mid,Consultation())
-        self.assertEqual([t['stage'] for t in state['turns']],['explore','consult','explore','challenge','experiment','verify','assess','conclude'])
+        self.assertEqual([t['stage'] for t in state['turns']],['explore','consult','explore','challenge','experiment','verify','assess','conclude','write','read'])
         self.assertEqual(state['turns'][1]['agent'],'critic')
         self.assertEqual(len(state['claims']),1)
 
@@ -67,7 +67,7 @@ class MissionTests(unittest.TestCase):
         class Invalid(AutonomousDemo):
             def generate(self,*args,**kwargs):
                 r=super().generate(*args,**kwargs);r.text='invalid response';return r
-        mid=self.create(call_limit=6)
+        mid=self.create(call_limit=8)
         state=run_mission(self.lab,mid,Invalid())
         self.assertEqual(len(state['turns']),2)
         self.assertEqual(state['missions'][0]['status'],'failed')
@@ -163,9 +163,9 @@ class MissionTests(unittest.TestCase):
         self.assertIn('disputed',[e['action'] for e in snapshot['mission_claim_events']])
 
     def test_finite_allowance_stops_before_incomplete_second_cycle(self):
-        state=run_mission(self.lab,self.create(call_limit=7))
+        state=run_mission(self.lab,self.create(call_limit=9))
         self.assertEqual(state['missions'][0]['status'],'exhausted')
-        self.assertEqual(len(state['turns']),6)
+        self.assertEqual(len(state['turns']),8)
 
 
 if __name__=='__main__':unittest.main()

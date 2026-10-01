@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "emergence-lab"
-version = "0.2.0"
+version = "0.3.0"
 description = "A local autonomous laboratory for collective AI research."
 readme = "README.md"
 requires-python = ">=3.11"

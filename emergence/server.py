@@ -22,7 +22,7 @@ class Server(ThreadingHTTPServer):
         super().__init__(address, Handler)
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "EmergenceLab/0.2"
+    server_version = "EmergenceLab/0.3"
     def log_message(self, fmt, *args):
         # No request bodies, credentials, prompts or query strings in logs.
         pass
@@ -105,9 +105,14 @@ class Handler(BaseHTTPRequestHandler):
                 query=parse_qs(urlsplit(self.path).query)
                 self.send(self.server.mission_manager.missions.state(query.get("id",[None])[0]))
             elif path == "/api/health":
-                self.send({"ok": True, "version": "0.2.0"})
+                self.send({"ok": True, "version": "0.3.0"})
             elif path == "/api/export":
                 self.send({"format_version":2,"lab":self.lab.state(),"autonomy":self.server.mission_manager.missions.export()}, download="emergence-lab-export.json")
+            elif re.fullmatch(r'/api/reports/[a-zA-Z0-9_]+/download',path):
+                from .quality import download
+                with self.lab.tx() as db:
+                    body=download(db,path.split('/')[3])
+                self.send(body,content_type='text/html; charset=utf-8',download=path.split('/')[3]+'.html')
             elif re.fullmatch(r"/api/artifacts/[a-zA-Z0-9_]+/download", path):
                 identifier = path.split("/")[3]
                 with self.lab.tx() as db:
@@ -151,6 +156,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.owner()
                 if path == "/api/missions":
                     result=self.server.mission_manager.missions.create(p)
+                elif re.fullmatch(r'/api/reports/[a-zA-Z0-9_]+/feedback',path):
+                    from .quality import feedback
+                    with self.lab.tx() as db:
+                        result=feedback(db,path.split('/')[3],p.get('value'),p.get('reason'))
+                elif re.fullmatch(r'/api/missions/[a-zA-Z0-9_]+/refine',path):
+                    result=self.server.mission_manager.missions.refine(path.split('/')[3])
+                    self.server.mission_manager.start(result['id'])
                 elif re.fullmatch(r"/api/missions/[a-zA-Z0-9_]+/(start|pause|stop)",path):
                     identifier,action=path.split("/")[3:5]
                     result=(self.server.mission_manager.start(identifier) if action=="start"

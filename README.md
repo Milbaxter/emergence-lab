@@ -1,10 +1,10 @@
 # Emergence Lab
 
-A local, open-source research team that chooses questions, critiques methods, runs experiments, and updates shared findings within a mission you set.
+A local, open-source research team that chooses useful questions, runs experiments, and turns supported findings into concise, reviewed research notes within a mission you set.
 
 **You set the direction and allowance. Agents make routine research decisions without approval clicks.** The long-term hypothesis is that interaction can improve collective intelligence. This release makes that hypothesis testable; it does not demonstrate AGI, superintelligence, or spontaneous self-organization.
 
-Pilot: one owner, four roles, ChatGPT subscription inference through the official Codex CLI, local SQLite, and off-chain rules. No API-key provider, external hosting, token issuance, or automatic purchases.
+Pilot: one owner, six roles, ChatGPT subscription inference through the official Codex CLI, local SQLite, and off-chain rules. No API-key provider, external hosting, token issuance, or automatic purchases.
 
 ## Start a mission
 
@@ -31,10 +31,10 @@ A finite mission can also run directly from your terminal:
 
 ```sh
 # Fixed-response rehearsal; no model calls.
-python3 -m emergence mission --provider demo --calls 12 --cycles 2
+python3 -m emergence mission --provider demo --calls 12 --cycles 1
 
-# Your subscription; up to 12 attempts across two research cycles.
-python3 -m emergence mission --provider codex --calls 12 --cycles 2 --minutes 20 \
+# Your subscription; one cycle with room for review and revision.
+python3 -m emergence mission --provider codex --calls 12 --cycles 1 --minutes 20 \
   --objective "Find and test a practical improvement to evidence-aware agent memory."
 ```
 
@@ -44,18 +44,34 @@ Add `--model MODEL_ID` to select an available model explicitly. Otherwise the Co
 
 | Stage | Autonomous decision |
 |---|---|
-| Scout | Select a narrow question, hypothesis, sources, baseline, and success criterion |
-| Critic | Challenge confounds and propose a stronger experiment |
+| Scout | Identify a reader and decision; select a narrow question, hypothesis, sources, baseline, and success criterion |
+| Critic | Accept the usefulness and method, request one reframe, or stop before execution |
 | Researcher | Write a Python experiment incorporating the critique |
 | Critic | Inspect the executed code and receipt; write separate checks or an ablation |
 | Critic after execution | Assess the observed verification result and accept or reject the scoped evidence |
 | Coordinator | Accept, revise once, or retain an inconclusive result; choose the next question |
+| Editor | Write a concise research note from a checked finding and its actual evidence |
+| Fresh reader | Check usefulness, evidence, clarity, actionability, and restraint; accept, request one rewrite, or withhold |
 
 Agents see each other's messages and actual execution receipts. They can address a focused question to another role, which replies before the caller continues. There are at most two such consultations per cycle. The coordinator can request one revision, consuming the same finite call allowance.
 
-This is a **designed research protocol with adaptive decisions**, not a free-form swarm. Roles run serially on the same subscription. There is no majority vote pretending that four roles are four independent people. Public enrollment, multiple workgroups, and on-chain governance are later stages.
+This is a **designed research protocol with adaptive decisions**, not a free-form swarm. Roles run serially on the same subscription. Different roles are not independent people. Public enrollment, multiple workgroups, and on-chain governance are later stages.
 
-The dashboard shows the mission, conversation, current question, calls and recorded tokens, generated code, executable evidence, findings, and amendment history. It updates while a mission runs. You can pause or stop at the mission level.
+The dashboard leads with the finished research note: takeaway, purpose, comparison, next action, and limitations. Working notes, conversation, usage, code, evidence, and history are available underneath. You can pause or stop at the mission level.
+
+## The quality bar
+
+A mission can finish with nothing ready to share. More messages and more reports are not success metrics.
+
+Before spending calls on an experiment, the team must name who it helps, what decision it could change, why it is needed, and how it differs from existing work. The critic can reject it. Without evidence of reader demand, the brief must call that need an assumption.
+
+A checked finding is still an internal finding. To become a finished note, it needs a separate writing pass and a fresh reader review. The reader receives the draft and evidence without the preceding conversation, and must quote a real passage for each of five checks. The evidence check must also identify a supporting execution. Exact citations and complete fields are enforced mechanically; whether the explanation is actually good remains an agent judgment.
+
+One rewrite and another fresh review are allowed. Unchanged rewrites, missing evidence, incomplete reviews, and unresolved defects cannot make a report ready. Every edition and review is retained. Running out of calls does not waive the checks. A retracted or superseded finding withdraws its related reports.
+
+Ready notes can be downloaded as standalone, printable HTML. **Useful to me / Not useful** feedback with a reason helps guide future missions. It is optional and never an approval gate. Agent review cannot establish human demand by itself. See the [quality standard](docs/quality-standard.md).
+
+Missions created before this release retain their original six-stage protocol. Their checked findings can use **Prepare a research note**, which permits up to four editorial calls without rerunning the experiment.
 
 ## Evidence and memory
 
@@ -72,7 +88,7 @@ Source URLs are provenance, not proof of retrieval or truth. Scouts have Codex's
 - Only `codex` (ChatGPT OAuth) and `demo` inference are supported. API-key login is rejected and API-key environment variables are removed. There is no billed API fallback.
 - Subscription usage is real usage. A zero API-spend receipt does not mean zero tokens or unlimited access. Recorded token counters are displayed; this app cannot guarantee a token ceiling or read your remaining account allowance.
 - The allowance is **attempts**, including failed or interrupted invocations. A request is reserved atomically before inference. Retries, consultations, and revisions consume the same allowance.
-- One mission runner per data directory. Defaults: 12 attempts, two cycles, 20-minute scheduling deadline. A cycle needs at least six turns; revisions or consultations may leave room for only one cycle.
+- One mission runner per data directory. Defaults: 12 attempts, one cycle, 20-minute scheduling deadline. An accepted cycle uses at least eight turns including writing and reader review. A new cycle starts only with ten attempts left, reserving room for a possible editorial rewrite. Two clean cycles therefore need an allowance of at least 18. Consultations, research revisions, or failures can leave fewer cycles completed.
 - Pausing/stopping or reaching the deadline prevents subsequent work once the current operation returns. An in-flight Codex request may finish and consume allowance. Stopping does not cancel a request at the provider.
 - Provider errors pause the mission without silently resending the request. Restart recovery preserves recorded receipts and consumed slots. A manual resume is an exceptional mission-level action and may repeat the interrupted stage with a new slot; there is no exactly-once inference guarantee.
 - `EMERGENCE_CODEX_TIMEOUT_SECONDS` sets each CLI subprocess timeout (default 180; range 15–600). A scheduling deadline can be exceeded by an already-running invocation.
@@ -97,7 +113,7 @@ The next scientific question is whether interaction helps **at matched resources
 
 ## Data and development
 
-Private state lives in ignored `.emergence/`. Export includes the manual lab plus all mission prompts, responses, usage, messages, code, receipts, claims, and history. Inspect before sharing. JSON import is not implemented; back up the data directory with all runners stopped.
+Private state lives in ignored `.emergence/`. Export includes the manual lab plus all mission prompts, responses, usage, messages, code, receipts, claims, report editions, reviews, and reader feedback. Inspect before sharing. JSON import is not implemented; back up the data directory with all runners stopped.
 
 ```sh
 python3 -m unittest discover -s tests -v

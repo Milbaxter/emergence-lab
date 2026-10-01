@@ -26,22 +26,36 @@ A useful future proposal score could combine expected information gain, practica
 ```mermaid
 flowchart TD
   H[Human: mission and allowance] --> S[Scout: choose question]
-  S --> C[Critic: challenge method]
-  C --> R[Researcher: write experiment]
+  S --> C{Critic: useful question and sound method?}
+  C -->|one reframe| S
+  C -->|reject| E[Stop; no finished report]
+  C -->|accept| R[Researcher: write experiment]
   R --> X[Isolated execution]
   X --> V[Critic: code-based verification]
   V --> Y[Isolated verification]
   Y --> A[Critic: assess observed checks]
   A --> K[Coordinator: assess evidence]
   K -->|one revision allowed| R
-  K --> M[Versioned finding and next question]
-  M -->|allowance remains| S
-  M -->|limit or completion| E[Stop]
+  K --> M[Finding and next question]
+  M -->|peer checked; allowance remains| W[Editor: write human research note]
+  M -->|inconclusive| E
+  W --> F{Fresh reader: five checks}
+  F -->|one rewrite| W
+  F -->|unresolved defects| E
+  F -->|accept exact edition| O[Ready note; optional human feedback]
+  O -->|another cycle fits| S
+  O -->|limit or completion| Z[Stop]
 ```
 
 A role may address a peer directly; the reply returns to the caller, using additional calls. The protocol remains fixed. Agents can revise their work and shared knowledge; they cannot rewrite the harness, create unlimited agents, or grant themselves more authority.
 
 Claims are provisional or peer checked. Checked claims require two successful executions, a positive executable verification flag, and critic/coordinator acceptance. This mechanical gate cannot know whether the scientific claim follows from the checks. Retractions preserve an event trail; unverified challenges cannot silently remove an existing claim. Synthetic and live memory are separated.
+
+Publication readiness is separate from evidence status. A writer turns a checked finding into a note of at most 650 words. A fresh reader sees the note and evidence without the authors' discussion or previous review. Five checks cover usefulness, evidence, clarity, actionability, and restraint; each must cite an exact passage, and the evidence check must identify a supporting run. A single rewrite is allowed and must change the edition. Every draft and review remains inspectable. These rules prevent skipped review, not correlated model mistakes.
+
+The usefulness gate runs before execution. It asks which reader decision the work can improve and permits one reframe before withholding. Optional owner feedback on ready notes guides future work without blocking agents. Feedback associated with withdrawn findings is excluded from future context. See the [quality standard](quality-standard.md) for editorial and evaluation criteria.
+
+One accepted cycle normally uses eight calls. The default is one cycle with 12 attempts, leaving some room for revisions. A subsequent cycle requires at least ten remaining attempts. Call and deadline exhaustion never turn an unfinished report into a finished one. Consultation is disabled during writing and review and is limited during research so it cannot consume the minimum finishing allowance.
 
 ## How to test the emergence thesis
 
@@ -60,7 +74,7 @@ A credible positive result is a repeatable advantage over the strongest matched-
 
 ## Next build sequence
 
-1. **Validate this loop:** measure complete missions, failure rates, test quality, and costs; inspect whether criticism changes outcomes.
+1. **Validate this loop:** measure human usefulness and defects caught, as well as failure rates, test quality, and costs; inspect whether criticism changes outcomes. Include withheld work so report volume does not become a success proxy.
 2. **Add independent grading:** protected held-out tasks and matched-resource baselines through the real mission runner.
 3. **Let agents propose workgroups:** a shared task board, finite work allocations, dependencies, and competing proposals. Keep contribution evidence separate from governance influence.
 4. **Add outside contributors:** authenticated owners, scoped workers, signed receipts, duplicate-work prevention, and disposable execution environments. Do not pool or copy people's OAuth credentials; donated inference must run through their own authorized clients.
