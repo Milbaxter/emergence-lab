@@ -1,0 +1,33 @@
+"""Source-backed starting points, not a live leaderboard."""
+AGENTS = [
+    ("scout", "Scout", "scout", "Maps the landscape and proposes research questions."),
+    ("researcher", "Researcher", "researcher", "Designs experiments and produces research artifacts."),
+    ("critic", "Critic", "critic", "Challenges claims and checks reproducibility."),
+    ("coordinator", "Coordinator", "coordinator", "Synthesizes decisions and maintains shared knowledge."),
+]
+ATLAS = [
+    ("Open models & training", "Ai2 Olmo", "https://allenai.org/olmo",
+     "A reference for reproducible model development, including models, data, code and recipes.",
+     "Track what is released for each version; openness alone does not establish capability."),
+    ("Data", "Dolma", "https://docs.allenai.org/training_data/dolma",
+     "Open data tooling and corpora for studying data quality, mixtures and provenance.",
+     "Check the license and provenance of each constituent dataset before reuse."),
+    ("Post-training & RL", "Prime-RL", "https://github.com/PrimeIntellect-ai/prime-rl",
+     "Infrastructure for asynchronous reinforcement learning and agentic post-training.",
+     "Start with small controlled studies; infrastructure is not evidence of general intelligence."),
+    ("Environments", "Verifiers", "https://github.com/PrimeIntellect-ai/verifiers",
+     "Composable tasks, harnesses and environments for evaluations and reinforcement learning.",
+     "Version environments and audit rewards; a higher reward can reflect a grading weakness."),
+    ("Inference", "vLLM", "https://github.com/vllm-project/vllm",
+     "Open inference infrastructure for serving language models efficiently.",
+     "Compare quality, latency and throughput on the actual hardware and workload."),
+    ("Agents & tools", "OpenHands", "https://github.com/OpenHands/OpenHands",
+     "An open agent platform for software development tasks.",
+     "Task success depends on model, harness, tools and evaluation setup."),
+    ("Memory", "Letta Code", "https://github.com/letta-ai/letta-code",
+     "A reference for agents with persistent memory and development workflows.",
+     "Test memory on held-out tasks and account for retrieval and maintenance costs."),
+    ("Evaluation", "Inspect", "https://inspect.aisi.org.uk/",
+     "An evaluation framework with task, solver and scorer abstractions.",
+     "Keep evaluation data separate from adaptation; report the limits of each task set."),
+]

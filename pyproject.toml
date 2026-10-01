@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emergence-lab"
+version = "0.1.0"
+description = "A local, community-ready laboratory for collective AI research."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "Emergence Lab contributors"}]
+dependencies = []
+
+[project.scripts]
+emergence = "emergence.__main__:main"
+
+[tool.setuptools.package-data]
+emergence = ["static/*"]
+
+[tool.setuptools.packages.find]
+include = ["emergence*"]
